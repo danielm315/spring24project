@@ -8,6 +8,18 @@ from scapy.sendrecv import sniff
 bad_mac_addresses = ["11:22:33:44:55:66", "aa:bb:cc:dd:ee:ff"]
 rogue_ap_addresses = ["00:11:22:33:44:55", "ff:ff:ff:ff:ff:ff"]
 
+# List of authorized channels for wifi
+authorized_channels = [1, 6, 11]  # Example: authorized channels 1, 6, and 11
+
+# Sender/Deauth dictionary
+deauth_count = {}
+
+# Threat Scores for each MAC address
+threat_scores = {}
+def update_threat_score(mac_address, score_increment):
+    if mac_address not in threat_scores:
+        threat_scores[mac_address] = 0
+    threat_scores[mac_address] += score_increment
 
 def arp_spoof_detect(packet):
     global bad_mac_addresses
@@ -34,15 +46,17 @@ def ip_spoof_detect(packet):
 
 
 def deauth_detect(packet):
-    global bad_mac_addresses
+    global deauth_count
     if Dot11Deauth in packet:
-        bssid = packet[Dot11].addr2
-        client = packet[Dot11].addr1
-        print(f"Deauthentication attack detected: BSSID {bssid} deauthenticating client {client}")
-        if client not in bad_mac_addresses:
-            bad_mac_addresses.append(client)
-            print(f"Added {client} to bad MAC addresses list")
+        sender_mac = packet[Dot11].addr2  # MAC address of the sender
+        if sender_mac not in deauth_count:
+            deauth_count[sender_mac] = 1
+        else:
+            deauth_count[sender_mac] += 1
 
+        # Check if the sender has sent an excessive number of deauth packets (e.g., more than 10)
+        if deauth_count[sender_mac] > 10:
+            print(f"Excessive deauthentication packets detected from MAC address {sender_mac}")
 
 def rogue_ap_detect(packet):
     global rogue_ap_addresses
@@ -54,12 +68,29 @@ def rogue_ap_detect(packet):
             print(f"Added {bssid} to rogue AP addresses list")
 
 
+def unauthorized_channel_detect(packet, authorized_channels):
+    if Dot11Beacon in packet:
+        channel = ord(packet[Dot11Beacon].info[0])
+        if channel not in authorized_channels:
+            print(f"Unauthorized Wi-Fi channel detected: Channel {channel}")
+
+
+# Add unauthorized_channel_detect to the packet_callback function
 def packet_callback(packet):
     arp_spoof_detect(packet)
     ip_spoof_detect(packet)
     deauth_detect(packet)
     rogue_ap_detect(packet)
+    unauthorized_channel_detect(packet)
 
+
+# Add unauthorized_channel_detect to the packet_callback function
+def packet_callback(packet):
+    arp_spoof_detect(packet)
+    ip_spoof_detect(packet)
+    deauth_detect(packet)
+    rogue_ap_detect(packet)
+    unauthorized_channel_detect(packet)
 
 # Sniffing Wi-Fi traffic on the specified interface (change 'wlan0' to your interface name)
 sniff(iface='wlan0', prn=packet_callback, store=0)
