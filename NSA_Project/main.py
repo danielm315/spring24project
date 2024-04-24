@@ -3,10 +3,17 @@ from scapy.layers.dot11 import Dot11Deauth, Dot11Beacon, Dot11
 from scapy.layers.inet import IP
 from scapy.layers.l2 import getmacbyip, ARP
 from scapy.sendrecv import sniff
+from datetime import datetime, timedelta
 
 # Define initial known bad MAC addresses and rogue AP addresses
 bad_mac_addresses = ["11:22:33:44:55:66", "aa:bb:cc:dd:ee:ff"]
 rogue_ap_addresses = ["00:11:22:33:44:55", "ff:ff:ff:ff:ff:ff"]
+
+# Dictionary to store MAC-IP mappings with timestamps
+mac_ip_mappings = {}
+
+# Define the expiration time for MAC-IP mappings (e.g., 5 minutes)
+mapping_expiration = timedelta(minutes=5)
 
 # List of authorized channels for wifi
 authorized_channels = [1, 6, 11]  # Example: authorized channels 1, 6, and 11
@@ -16,21 +23,41 @@ deauth_count = {}
 
 # Threat Scores for each MAC address
 threat_scores = {}
+
+
 def update_threat_score(mac_address, score_increment):
     if mac_address not in threat_scores:
         threat_scores[mac_address] = 0
     threat_scores[mac_address] += score_increment
 
+
+def update_mac_ip_mapping(mac_address, ip_address):
+    mac_ip_mappings[mac_address] = {'ip': ip_address, 'timestamp': datetime.now()}
+
+
 def arp_spoof_detect(packet):
-    global bad_mac_addresses
+    global bad_mac_addresses, mac_ip_mappings
     if ARP in packet and packet[ARP].op in (1, 2):  # ARP Request (1) or ARP Reply (2)
         arp_src_mac = packet[ARP].hwsrc
         arp_src_ip = packet[ARP].psrc
-        if arp_src_mac != getmacbyip(arp_src_ip):
-            print(f"Possible ARP spoofing detected: {arp_src_ip} is claiming to have MAC {arp_src_mac}")
-            if arp_src_mac not in bad_mac_addresses:
-                bad_mac_addresses.append(arp_src_mac)
-                print(f"Added {arp_src_mac} to bad MAC addresses list")
+
+        if arp_src_mac in mac_ip_mappings:
+            existing_mapping = mac_ip_mappings[arp_src_mac]
+            if existing_mapping['ip'] != arp_src_ip:
+                # Alert: MAC address is claiming a different IP than previously mapped
+                print(
+                    f"ARP spoofing detected: {arp_src_mac} is claiming IP {arp_src_ip}, previously mapped to {existing_mapping['ip']}")
+                if arp_src_mac not in bad_mac_addresses:
+                    bad_mac_addresses.append(arp_src_mac)
+                    print(f"Added {arp_src_mac} to bad MAC addresses list")
+
+        update_mac_ip_mapping(arp_src_mac, arp_src_ip)
+
+        # Check for expired mappings and remove them
+        now = datetime.now()
+        for mac, mapping in mac_ip_mappings.items():
+            if now - mapping['timestamp'] > mapping_expiration:
+                del mac_ip_mappings[mac]
 
 
 def ip_spoof_detect(packet):
@@ -58,6 +85,7 @@ def deauth_detect(packet):
         if deauth_count[sender_mac] > 10:
             print(f"Excessive deauthentication packets detected from MAC address {sender_mac}")
 
+
 def rogue_ap_detect(packet):
     global rogue_ap_addresses
     if Dot11Beacon in packet:
@@ -83,14 +111,6 @@ def packet_callback(packet):
     rogue_ap_detect(packet)
     unauthorized_channel_detect(packet)
 
-
-# Add unauthorized_channel_detect to the packet_callback function
-def packet_callback(packet):
-    arp_spoof_detect(packet)
-    ip_spoof_detect(packet)
-    deauth_detect(packet)
-    rogue_ap_detect(packet)
-    unauthorized_channel_detect(packet)
 
 # Sniffing Wi-Fi traffic on the specified interface (change 'wlan0' to your interface name)
 sniff(iface='wlan0', prn=packet_callback, store=0)
