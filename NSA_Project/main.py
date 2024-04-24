@@ -5,18 +5,19 @@ from scapy.layers.l2 import getmacbyip, ARP
 from scapy.sendrecv import sniff
 from datetime import datetime, timedelta
 
-# Define initial known bad MAC addresses and rogue AP addresses
+# Define known bad MAC addresses, rogue AP addresses, and authorized channels
 bad_mac_addresses = ["11:22:33:44:55:66", "aa:bb:cc:dd:ee:ff"]
 rogue_ap_addresses = ["00:11:22:33:44:55", "ff:ff:ff:ff:ff:ff"]
+authorized_channels = [1, 6, 11]  # Example: authorized channels 1, 6, and 11
 
 # Dictionary to store MAC-IP mappings with timestamps
 mac_ip_mappings = {}
 
+# Dictionary to store MAC addresses that need to be removed due to deauthentication or inactivity
+macs_to_remove = {}
+
 # Define the expiration time for MAC-IP mappings (e.g., 5 minutes)
 mapping_expiration = timedelta(minutes=5)
-
-# List of authorized channels for wifi
-authorized_channels = [1, 6, 11]  # Example: authorized channels 1, 6, and 11
 
 # Sender/Deauth dictionary
 deauth_count = {}
@@ -35,8 +36,13 @@ def update_mac_ip_mapping(mac_address, ip_address):
     mac_ip_mappings[mac_address] = {'ip': ip_address, 'timestamp': datetime.now()}
 
 
+def remove_mac_ip_mapping(mac_address):
+    if mac_address in mac_ip_mappings:
+        del mac_ip_mappings[mac_address]
+
+
 def arp_spoof_detect(packet):
-    global bad_mac_addresses, mac_ip_mappings
+    global bad_mac_addresses, mac_ip_mappings, macs_to_remove
     if ARP in packet and packet[ARP].op in (1, 2):  # ARP Request (1) or ARP Reply (2)
         arp_src_mac = packet[ARP].hwsrc
         arp_src_ip = packet[ARP].psrc
