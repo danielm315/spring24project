@@ -4,6 +4,7 @@ from scapy.layers.inet import IP
 from scapy.layers.l2 import getmacbyip, ARP
 from scapy.sendrecv import sniff
 from datetime import datetime, timedelta
+import subprocess
 
 # Define known bad MAC addresses, rogue AP addresses, and authorized channels
 bad_mac_addresses = ["11:22:33:44:55:66", "aa:bb:cc:dd:ee:ff"]
@@ -24,6 +25,21 @@ deauth_count = {}
 
 # Threat Scores for each MAC address
 threat_scores = {}
+
+
+def loop_threat_scores:
+    for i,j in threat_scores:
+        if j < 10:
+            ip_tables_add_rule(i)
+
+def ip_tables_add_rule(mac_address):
+    iptables_cmd = f"sudo iptables -A INPUT -m mac --mac-source {mac_address} -j DROP"
+
+    try:
+        subprocess.run(iptables_cmd, shell=True, check=True)
+        print(f"Rule added to drop traffic from MAC address {mac_address}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error: {e}")
 
 
 def update_threat_score(mac_address, score_increment):
@@ -115,7 +131,8 @@ def packet_callback(packet):
     ip_spoof_detect(packet)
     deauth_detect(packet)
     rogue_ap_detect(packet)
-    unauthorized_channel_detect(packet)
+    unauthorized_channel_detect(packet,authorized_channels) ### Change if needed
+    loop_threat_scores()
 
 
 # Sniffing Wi-Fi traffic on the specified interface (change 'wlan0' to your interface name)
