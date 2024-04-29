@@ -27,10 +27,11 @@ deauth_count = {}
 threat_scores = {}
 
 
-def loop_threat_scores:
-    for i,j in threat_scores: # i = mac_address j is threat score
+def loop_threat_scores():
+    for i, j in threat_scores:  # i = mac_address j is threat score
         if j < 10:
             ip_tables_add_rule(i)
+
 
 def ip_tables_add_rule(mac_address):
     iptables_cmd = f"sudo iptables -A INPUT -m mac --mac-source {mac_address} -j DROP"
@@ -131,7 +132,7 @@ def packet_callback(packet):
     ip_spoof_detect(packet)
     deauth_detect(packet)
     rogue_ap_detect(packet)
-    unauthorized_channel_detect(packet,authorized_channels) ### Change if needed
+    unauthorized_channel_detect(packet, authorized_channels)  ### Change if needed
     loop_threat_scores()
 
 
