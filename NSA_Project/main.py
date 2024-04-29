@@ -28,7 +28,7 @@ threat_scores = {}
 
 
 def loop_threat_scores:
-    for i,j in threat_scores:
+    for i,j in threat_scores: # i = mac_address j is threat score
         if j < 10:
             ip_tables_add_rule(i)
 
